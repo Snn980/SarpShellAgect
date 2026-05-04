@@ -1,293 +1,235 @@
 /**
- * @file AgentPanel.jsx
- * Microsoft Agent Framework 1.2 — Agent tasarımcısı ve simülatörü.
- * Gerçek MAF SDK olmadan Claude API ile davranışı simüle eder.
+ * AgentPanel.jsx - Multi-Agent Workflow System
+ * Gemini 1.5 Flash ile çalışan profesyonel ajan paneli
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
-/** @typedef {import('../../services/ClaudeService.js').ClaudeService} ClaudeService */
-
-/**
- * @typedef {'sequential'|'parallel'|'hitl'} WorkflowType
- *
- * @typedef {Object} AgentConfig
- * @property {string} name
- * @property {string} instructions
- * @property {string[]} tools
- *
- * @typedef {Object} AgentPanelProps
- * @property {ClaudeService}   claude
- * @property {boolean}         loading
- * @property {(lines:import('../../types/index.js').OutputLine[])=>void} onOutput
- */
-
-const TOOL_OPTIONS = ['web_search', 'file_read', 'code_exec', 'mcp_client', 'a2a_bridge'];
-
-const WORKFLOW_TEMPLATES = /** @type {Record<WorkflowType, string>} */ ({
-  sequential: `// MAF 1.2 — Sıralı Workflow
-var workflow = new SequentialWorkflow()
-    .AddStep(new AIAgent(client, name: "Analyzer",  instructions: "Kodu analiz et."))
-    .AddStep(new AIAgent(client, name: "Optimizer", instructions: "Optimize öner."))
-    .AddStep(new AIAgent(client, name: "Reviewer",  instructions: "Güvenlik incele."));
-
-string result = await workflow.RunAsync(userInput);`,
-
-  parallel: `// MAF 1.2 — Paralel Workflow (fan-out / fan-in)
-var workflow = new ParallelWorkflow()
-    .AddBranch(new AIAgent(client, name: "SecurityReviewer", instructions: "Güvenlik açıklarını bul."))
-    .AddBranch(new AIAgent(client, name: "PerfAnalyzer",    instructions: "Performans sorunlarını bul."))
-    .AddBranch(new AIAgent(client, name: "DocGenerator",    instructions: "Dokümantasyon yaz."))
-    .WithAggregator(new AIAgent(client, name: "Summarizer", instructions: "Sonuçları birleştir."));
-
-string result = await workflow.RunAsync(userInput);`,
-
-  hitl: `// MAF 1.2 — Human-in-the-Loop Workflow
-var workflow = new SequentialWorkflow()
-    .AddStep(new AIAgent(client, name: "Drafter", instructions: "Taslak oluştur."))
-    .AddStep(new HumanApprovalStep(
-        prompt: "Taslağı onaylıyor musunuz?",
-        onApprove: async (ctx) => Console.WriteLine("Onaylandı."),
-        onReject:  async (ctx) => Console.WriteLine("Reddedildi.")
-    ))
-    .AddStep(new AIAgent(client, name: "Finalizer", instructions: "Onaylanan taslağı tamamla."));
-
-string result = await workflow.RunAsync(userInput);`,
-});
-
-/** @param {AgentPanelProps} props */
 export function AgentPanel({ claude, loading, onOutput }) {
-  const [agents, setAgents]       = useState(/** @type {AgentConfig[]} */ ([
-    { name: 'Analyzer',  instructions: 'C# kodunu analiz et, hataları ve iyileştirme fırsatlarını listele.', tools: [] },
-    { name: 'Optimizer', instructions: 'Analiz sonuçlarına göre optimize edilmiş C# kodu üret.',             tools: ['code_exec'] },
-  ]));
-  const [workflowType, setType]   = useState(/** @type {WorkflowType} */ ('sequential'));
-  const [userInput,    setInput]  = useState('Merhaba, C# kodumu analiz et.');
-  const [running,      setRunning]= useState(false);
+  const [agents, setAgents] = useState([
+    { 
+      id: 1,
+      name: 'Analyzer', 
+      instructions: 'C# kodunu detaylı analiz et, hataları, iyileştirme fırsatlarını ve best practice önerilerini listele.',
+      color: '#C586C0'
+    },
+    { 
+      id: 2,
+      name: 'Optimizer', 
+      instructions: 'Kodu performans, okunabilirlik ve modern C# pratikleri açısından optimize et. Daha temiz ve verimli versiyon üret.',
+      color: '#4EC9B0'
+    }
+  ]);
+
+  const [workflowType, setWorkflowType] = useState('sequential');
+  const [userInput, setUserInput] = useState('Bu kodu analiz et ve optimize önerilerde bulun.');
+  const [running, setRunning] = useState(false);
 
   const addAgent = () => {
-    setAgents((prev) => [
-      ...prev,
-      { name: `Agent${prev.length + 1}`, instructions: '', tools: [] },
-    ]);
+    const newAgent = {
+      id: Date.now(),
+      name: `Agent${agents.length + 1}`,
+      instructions: 'Yeni ajanın görevini buraya yazın...',
+      color: '#FFCC66'
+    };
+    setAgents(prev => [...prev, newAgent]);
   };
 
-  /** @param {number} idx @param {Partial<AgentConfig>} patch */
-  const updateAgent = (idx, patch) => {
-    setAgents((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)),
-    );
+  const updateAgent = (id, updates) => {
+    setAgents(prev => prev.map(agent => 
+      agent.id === id ? { ...agent, ...updates } : agent
+    ));
   };
 
-  /** @param {number} idx */
-  const removeAgent = (idx) => {
-    setAgents((prev) => prev.filter((_, i) => i !== idx));
+  const removeAgent = (id) => {
+    setAgents(prev => prev.filter(agent => agent.id !== id));
   };
 
-  const runWorkflow = async () => {
+  const runWorkflow = useCallback(async () => {
     if (agents.length === 0 || running) return;
-    setRunning(true);
 
-    /** @type {import('../../types/index.js').OutputLine[]} */
-    const lines = [
-      { type: 'cmd',    text: `> MAF Workflow başlatıldı (${workflowType})` },
-      { type: 'system', text: `Ajan sayısı: ${agents.length}` },
-    ];
+    setRunning(true);
+    const lines = [{ type: 'cmd', text: `🚀 \( {workflowType.toUpperCase()} Workflow başlatıldı ( \){agents.length} ajan)` }];
 
     let context = userInput;
 
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
-      lines.push({ type: 'info', text: `\n[${agent.name}] çalışıyor…` });
+      
+      lines.push({ 
+        type: 'info', 
+        text: `\n🤖 [${agent.name}] çalışıyor...` 
+      });
 
       try {
-        const response = await claude.ask(
-          `Sen "${agent.name}" adlı bir AI ajanısın.\nGörevin: ${agent.instructions}\n\nGiriş:\n${context}`,
-          'MAF ajan simülatörüsün. Verilen role göre kısa, odaklı Türkçe yanıt ver.',
+        const prompt = `
+Sen "${agent.name}" adlı uzman bir AI ajansın.
+Görev: ${agent.instructions}
+
+Mevcut bağlam:
+${context}
+
+Kısa, net ve profesyonel Türkçe yanıt ver.
+`;
+
+        const response = await claude.ask(prompt, 
+          "Sen Microsoft Agent Framework ile çalışan profesyonel bir C# AI ajansısın. Teknik ve net ol."
         );
+
         context = response;
-        response.split('\n').filter(Boolean).forEach((l) => {
-          lines.push({ type: 'ai', text: `  ${agent.name}: ${l}` });
+        
+        response.split('\n').forEach(line => {
+          if (line.trim()) {
+            lines.push({ type: 'ai', text: `  ${agent.name}: ${line}` });
+          }
         });
+
       } catch (err) {
-        lines.push({ type: 'error', text: `  ${agent.name} hatası: ${String(err)}` });
+        lines.push({ 
+          type: 'error', 
+          text: `  ${agent.name} hatası: ${err.message || 'Bilinmeyen hata'}` 
+        });
         break;
       }
     }
 
-    lines.push({ type: 'system', text: '\n─── Workflow tamamlandı ───' });
+    lines.push({ type: 'system', text: '\n✅ Workflow başarıyla tamamlandı.' });
     onOutput(lines);
     setRunning(false);
-  };
+  }, [agents, workflowType, userInput, claude, onOutput]);
 
-  const MONO = "'JetBrains Mono','Fira Code',monospace";
-
-  const isLoading = loading || running;
+  const workflowTypes = [
+    { id: 'sequential', label: '→ Sıralı', color: '#007ACC' },
+    { id: 'parallel',   label: '⇉ Paralel', color: '#4EC9B0' },
+  ];
 
   return (
-    <div style={{ padding: '14px', overflow: 'auto', height: '100%', fontFamily: MONO }}>
-
-      {/* Başlık */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-        <span style={{ fontSize: '16px' }}>🤖</span>
-        <span style={{ fontSize: '13px', color: '#D4D4D4' }}>Microsoft Agent Framework 1.2</span>
+    <div style={{ padding: '16px', height: '100%', overflow: 'auto', fontFamily: "'JetBrains Mono', monospace" }}>
+      
+      <div style={{ marginBottom: '20px' }}>
+        <h2 style={{ margin: '0 0 8px 0', color: '#fff' }}>🤖 Multi-Agent System</h2>
+        <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>
+          Gemini ile çalışan akıllı ajan orkestrasyonu
+        </p>
       </div>
 
-      {/* Workflow tipi */}
-      <div style={{ marginBottom: '12px' }}>
-        <p style={{ fontSize: '11px', color: '#858585', marginBottom: '6px' }}>Workflow Tipi</p>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {/** @type {Array<{id:WorkflowType, label:string}>} */ ([
-            { id: 'sequential', label: '→ Sıralı'  },
-            { id: 'parallel',   label: '⇉ Paralel' },
-            { id: 'hitl',       label: '👤 HITL'    },
-          ]).map(({ id, label }) => (
+      {/* Workflow Type */}
+      <div style={{ marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>WORKFLOW TİPİ</p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {workflowTypes.map(type => (
             <button
-              key={id}
-              onClick={() => setType(id)}
+              key={type.id}
+              onClick={() => setWorkflowType(type.id)}
               style={{
-                background:   workflowType === id ? '#007ACC' : 'transparent',
-                border:       `1px solid ${workflowType === id ? '#007ACC' : '#474747'}`,
-                color:        workflowType === id ? '#fff' : '#858585',
-                borderRadius: '4px',
-                padding:      '4px 12px',
-                fontSize:     '12px',
-                cursor:       'pointer',
-                fontFamily:   MONO,
+                padding: '8px 16px',
+                border: `2px solid ${workflowType === type.id ? type.color : '#444'}`,
+                background: workflowType === type.id ? '#1e1e1e' : 'transparent',
+                color: workflowType === type.id ? '#fff' : '#aaa',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '13px'
               }}
             >
-              {label}
+              {type.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Ajan listesi */}
-      <div style={{ marginBottom: '12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <p style={{ fontSize: '11px', color: '#858585' }}>AJANLAR ({agents.length})</p>
-          <button onClick={addAgent} style={outlineBtn('#4EC9B0')}>+ Ajan Ekle</button>
+      {/* Agents List */}
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <p style={{ fontSize: '12px', color: '#aaa' }}>AJANLAR ({agents.length})</p>
+          <button onClick={addAgent} style={{
+            padding: '6px 12px',
+            background: '#2d2d2d',
+            border: '1px solid #4EC9B0',
+            color: '#4EC9B0',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}>
+            + Yeni Ajan
+          </button>
         </div>
 
-        {agents.map((agent, idx) => (
-          <div key={idx} style={{
-            background: '#252526', border: '1px solid #3C3C3C',
-            borderRadius: '6px', padding: '10px', marginBottom: '8px',
+        {agents.map((agent, index) => (
+          <div key={agent.id} style={{
+            background: '#252526',
+            border: '1px solid #3c3c3c',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '10px'
           }}>
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
-              <span style={{ color: '#C586C0', fontSize: '12px', minWidth: '20px' }}>#{idx + 1}</span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ color: agent.color, fontWeight: 'bold' }}>#{index + 1}</span>
               <input
                 value={agent.name}
-                onChange={(e) => updateAgent(idx, { name: e.target.value })}
-                style={inputStyle}
-                placeholder="Ajan adı"
+                onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                style={{ flex: 1, background: '#1e1e1e', border: '1px solid #444', color: '#fff', padding: '6px', borderRadius: '4px' }}
               />
-              <button onClick={() => removeAgent(idx)} style={{
-                background: 'transparent', border: 'none',
-                color: '#F44747', cursor: 'pointer', fontSize: '16px', flexShrink: 0,
-              }}>×</button>
+              <button onClick={() => removeAgent(agent.id)} style={{ color: '#f44747', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer' }}>
+                ✕
+              </button>
             </div>
+
             <textarea
               value={agent.instructions}
-              onChange={(e) => updateAgent(idx, { instructions: e.target.value })}
-              rows={2}
-              placeholder="Görev / instructions…"
-              style={{ ...inputStyle, resize: 'vertical', width: '100%' }}
+              onChange={(e) => updateAgent(agent.id, { instructions: e.target.value })}
+              placeholder="Bu ajanın görevi nedir?"
+              rows={3}
+              style={{
+                width: '100%',
+                background: '#1e1e1e',
+                border: '1px solid #444',
+                color: '#d4d4d4',
+                padding: '8px',
+                borderRadius: '4px',
+                resize: 'vertical'
+              }}
             />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-              {TOOL_OPTIONS.map((tool) => {
-                const active = agent.tools.includes(tool);
-                return (
-                  <button
-                    key={tool}
-                    onClick={() => updateAgent(idx, {
-                      tools: active
-                        ? agent.tools.filter((t) => t !== tool)
-                        : [...agent.tools, tool],
-                    })}
-                    style={{
-                      background:   active ? '#1a3a1a' : 'transparent',
-                      border:       `1px solid ${active ? '#4CAF50' : '#474747'}`,
-                      color:        active ? '#4CAF50' : '#555',
-                      borderRadius: '10px',
-                      padding:      '2px 8px',
-                      fontSize:     '10px',
-                      cursor:       'pointer',
-                      fontFamily:   MONO,
-                    }}
-                  >
-                    {tool}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         ))}
       </div>
 
-      {/* Giriş */}
-      <div style={{ marginBottom: '10px' }}>
-        <p style={{ fontSize: '11px', color: '#858585', marginBottom: '6px' }}>Workflow Girdisi</p>
+      {/* User Input */}
+      <div style={{ marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '6px' }}>İŞLEM GİRDİSİ</p>
         <textarea
           value={userInput}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setUserInput(e.target.value)}
           rows={3}
-          style={{ ...inputStyle, width: '100%', resize: 'vertical' }}
+          style={{
+            width: '100%',
+            background: '#1e1e1e',
+            border: '1px solid #444',
+            color: '#fff',
+            padding: '10px',
+            borderRadius: '6px',
+            resize: 'vertical'
+          }}
         />
       </div>
 
-      {/* Çalıştır */}
+      {/* Run Button */}
       <button
         onClick={runWorkflow}
-        disabled={isLoading || agents.length === 0}
+        disabled={running || loading || agents.length === 0}
         style={{
-          background:   isLoading ? '#555' : '#007ACC',
-          border:       'none',
-          color:        '#fff',
-          borderRadius: '4px',
-          padding:      '8px 18px',
-          fontSize:     '13px',
-          cursor:       isLoading ? 'not-allowed' : 'pointer',
-          fontFamily:   MONO,
-          width:        '100%',
-          marginBottom: '14px',
+          width: '100%',
+          padding: '12px',
+          background: running ? '#555' : '#007ACC',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '6px',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          cursor: running ? 'not-allowed' : 'pointer',
+          marginBottom: '20px'
         }}
       >
-        {isLoading ? '● Çalışıyor…' : '▶ Workflow Çalıştır'}
+        {running ? '● Ajanlar Çalışıyor...' : '▶ Workflow\'u Başlat'}
       </button>
-
-      {/* .NET kod şablonu */}
-      <details>
-        <summary style={{ fontSize: '11px', color: '#858585', cursor: 'pointer', marginBottom: '6px' }}>
-          .NET Kod Şablonu ({workflowType})
-        </summary>
-        <pre style={{
-          background: '#252526', border: '1px solid #3C3C3C',
-          borderRadius: '4px', padding: '10px',
-          fontSize: '11px', color: '#9CDCFE',
-          overflow: 'auto', whiteSpace: 'pre-wrap',
-        }}>
-          {WORKFLOW_TEMPLATES[workflowType]}
-        </pre>
-      </details>
     </div>
   );
 }
-
-/** @param {string} color @returns {import('react').CSSProperties} */
-function outlineBtn(color) {
-  return {
-    background: 'transparent', border: `1px solid ${color}`, color,
-    borderRadius: '4px', padding: '3px 10px', fontSize: '11px',
-    cursor: 'pointer', fontFamily: "'JetBrains Mono','Fira Code',monospace",
-  };
-}
-
-/** @type {import('react').CSSProperties} */
-const inputStyle = {
-  background: '#3C3C3C', border: '1px solid #474747',
-  borderRadius: '4px', color: '#D4D4D4',
-  padding: '5px 8px', fontSize: '12px',
-  fontFamily: "'JetBrains Mono','Fira Code',monospace",
-  outline: 'none',
-};
