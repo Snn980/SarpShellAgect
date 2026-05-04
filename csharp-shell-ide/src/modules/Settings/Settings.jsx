@@ -3,7 +3,7 @@
  * Uygulama ayarları paneli — font, tema, davranış.
  */
 
-import { THEMES } from '../Editor/SyntaxHighlighter.js';
+import { THEMES } from '../Editor/SyntaxHighlighter';
 
 /** @typedef {import('../../types/index.js').AppSettings} AppSettings */
 
