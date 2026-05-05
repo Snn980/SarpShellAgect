@@ -74,28 +74,34 @@ class Program {
   // ====================== HELPER ======================
   const addLog = useCallback((text, type = 'output') => {
     services.terminal?.addLog?.(text, type);
-  }, [services]);
+  }, [service]);
+   // App.jsx içindeki runCode fonksiyonu
+const runCode = async () => {
+  // activeFile kontrolü
+  const currentCode = activeFile?.content || "";
+  if (!currentCode.trim() || isRunning) return;
 
-  const runCode = async () => {
-    if (!currentCode?.trim()) {
-      alert("Lütfen kod yazın!");
-      return;
+  setIsRunning(true);
+  addLog("⏳ Piston API derleniyor...", "system");
+  setActiveTab('terminal'); 
+
+  try {
+    // BURASI KRİTİK: useAppServices'deki isimle aynı olmalı
+    const result = await services.piston.execute(currentCode); 
+    
+    if (result && result.success) {
+      addLog(result.output || "Program başarıyla çalıştı.", "success");
+    } else {
+      addLog(result?.error || "Bilinmeyen bir hata oluştu.", "error");
     }
+  } catch (err) {
+    // Görseldeki kırmızı hatayı yakalayan yer burası
+    addLog(`❌ Bağlantı Hatası: ${err.message}`, "error");
+  } finally {
+    setIsRunning(false);
+  }
+};
 
-    setIsRunning(true);
-    addLog("🚀 Kod çalıştırılıyor...", "system");
-
-    try {
-      const result = await services.build?.run?.(currentCode, addLog);
-      if (result?.success) {
-        addLog("✅ Başarıyla tamamlandı!", "success");
-      }
-    } catch (err) {
-      addLog(`❌ Hata: ${err.message}`, "error");
-    } finally {
-      setIsRunning(false);
-    }
-  };
 
   // ====================== RENDER ======================
   const renderContent = () => {
@@ -118,7 +124,14 @@ class Program {
         return <Terminal services={services} />;
 
       case 'agent':
-        return <AgentPanel services={services} currentCode={currentCode} />;
+  return (
+    <AgentPanel 
+      ai={services.ai}          // Servis ismi 'ai'
+      currentCode={activeFile?.content || ""} 
+      onOutput={addLog}         // App.jsx'teki addLog fonksiyonun
+    />
+  );
+
 
       case 'git':
         return <GitPanel services={services} currentFile={currentFile} />;

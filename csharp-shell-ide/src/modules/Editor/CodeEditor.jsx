@@ -1,201 +1,88 @@
 /**
  * @file CodeEditor.jsx
- * Kod editörü — söz dizimi katmanı + düzenlenebilir textarea + snippet paneli.
- * Props ile her şey inject edilir; internal state sadece UI odağı için.
  */
-
-import { useRef } from 'react';
-import { highlightCode, THEMES } from './SyntaxHighlighter.jsx';
+import React, { useRef } from 'react';
+import Editor from '@monaco-editor/react';
 import { SNIPPETS } from '../../constants/snippets.js';
 
-/** @typedef {import('../../types/index.js').LintError}   LintError   */
-/** @typedef {import('../../types/index.js').AppSettings} AppSettings */
-/** @typedef {import('../../types/index.js').Snippet}     Snippet     */
+// Test için varsayılan C# kodu (Piston ve Gemini testine uygun)
+const DEFAULT_CS_CODE = `using System;
+using System.Collections.Generic;
+using System.Linq;
 
-/**
- * @typedef {Object} CodeEditorProps
- * @property {string}      code
- * @property {(v:string)=>void} onChange
- * @property {LintError[]} errors
- * @property {AppSettings} settings
- * @property {boolean}     isMobile
- */
+class Program {
+    static void Main() {
+        // Piston API Testi
+        Console.WriteLine("🚀 SarpShell C# Engine Aktif!");
+        
+        var numbers = new List<int> { 1, 2, 3, 4, 5 };
+        var query = numbers.Where(n => n > 2).Sum();
+        
+        Console.WriteLine($"LINQ Test Sonucu (Sum > 2): {query}");
+        Console.WriteLine("------------------------------------");
+        
+        // Gemini API etkileşimi için buraya yorum bırakabilirsin
+        // TODO: Agent panelinden bu kodu optimize etmesini isteyin.
+    }
+}`;
 
-/** @param {CodeEditorProps} props */
-export function CodeEditor({ code, onChange, errors, settings, isMobile }) {
-  const textareaRef = useRef(/** @type {HTMLTextAreaElement|null} */ (null));
-  const theme       = THEMES[settings.theme] ?? THEMES.dark;
+export function CodeEditor({ code, onChange, settings, isMobile }) {
+  const editorRef = useRef(null);
 
-  const MONO = "'JetBrains Mono','Fira Code','Cascadia Code',monospace";
-  const FS   = `${settings.fontSize}px`;
-  const LS   = '1.5';
+  // Eğer kod boşsa varsayılan test kodunu yükle
+  const currentVal = code || DEFAULT_CS_CODE;
 
-  /** @param {import('react').KeyboardEvent<HTMLTextAreaElement>} e */
-  const handleKeyDown = (e) => {
-    const ta = e.currentTarget;
+  const handleEditorDidMount = (editor) => {
+    editorRef.current = editor;
+  };
 
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const indent = ' '.repeat(settings.tabSize);
-      const start  = ta.selectionStart;
-      const end    = ta.selectionEnd;
-      onChange(code.slice(0, start) + indent + code.slice(end));
-      // cursor pozisyonunu sonraki tick'te güncelle
-      requestAnimationFrame(() => {
-        ta.selectionStart = ta.selectionEnd = start + settings.tabSize;
-      });
+  const insertAtCursor = (text) => {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const selection = editor.getSelection();
+      editor.executeEdits("source", [{
+        range: selection,
+        text: text,
+        forceMoveMarkers: true
+      }]);
     }
   };
 
-  /** @param {string} text */
-  const insertAtCursor = (text) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    onChange(code.slice(0, start) + text + code.slice(ta.selectionEnd));
-    requestAnimationFrame(() => {
-      ta.selectionStart = ta.selectionEnd = start + text.length;
-      ta.focus();
-    });
-  };
-
-  /** @param {Snippet} snippet */
-  const applySnippet = (snippet) => onChange(snippet.code);
-
-  const highlighted = highlightCode(code, theme, settings.lineNumbers, errors);
-
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-
-      {/* ── Editör alanı ── */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-
-        {/* Söz dizimi önizleme (pointer-events:none) */}
-        <div
-          aria-hidden="true"
-          style={{
-            position:      'absolute',
-            inset:         0,
-            padding:       `12px 0 12px ${settings.lineNumbers ? '0' : '8px'}`,
-            fontFamily:    MONO,
-            fontSize:      FS,
-            lineHeight:    LS,
-            whiteSpace:    'pre',
-            overflowWrap:  settings.wordWrap ? 'break-word' : 'normal',
-            overflow:      'hidden',
-            pointerEvents: 'none',
-            color:         '#D4D4D4',
-          }}
-        >
-          {highlighted}
-        </div>
-
-        {/* Düzenlenebilir textarea */}
-        <textarea
-          ref={textareaRef}
-          value={code}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          spellCheck={false}
-          autoCorrect="off"
-          autoCapitalize="off"
-          style={{
-            position:    'absolute',
-            inset:       0,
-            padding:     `12px 0 12px ${settings.lineNumbers ? '54px' : '8px'}`,
-            background:  'transparent',
-            color:       'transparent',
-            caretColor:  '#AEAFAD',
-            border:      'none',
-            outline:     'none',
-            resize:      'none',
-            fontFamily:  MONO,
-            fontSize:    FS,
-            lineHeight:  LS,
-            whiteSpace:  settings.wordWrap ? 'pre-wrap' : 'pre',
-            overflowWrap:settings.wordWrap ? 'break-word' : 'normal',
-            overflow:    'auto',
-            zIndex:      2,
+    <div style={{ display: 'flex', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1 }}>
+        <Editor
+          height="100%"
+          language="csharp"
+          theme={settings.theme === 'dark' ? 'vs-dark' : 'light'}
+          value={currentVal}
+          onChange={(v) => onChange(v || '')}
+          onMount={handleEditorDidMount}
+          options={{
+            fontSize: settings.fontSize,
+            minimap: { enabled: !isMobile },
+            wordWrap: 'on',
+            automaticLayout: true,
+            padding: { top: 10 }
           }}
         />
       </div>
 
-      {/* ── Snippet paneli (desktop) ── */}
       {!isMobile && (
-        <aside
-          style={{
-            width:      '160px',
-            borderLeft: '1px solid #474747',
-            background: '#252526',
-            overflow:   'auto',
-            flexShrink: 0,
-            display:    'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div style={{ padding: '7px 10px', fontSize: '11px', color: '#858585', borderBottom: '1px solid #474747' }}>
-            📋 Snippet'ler
-          </div>
-          {SNIPPETS.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => applySnippet(s)}
-              style={{
-                background:   'transparent',
-                border:       'none',
-                borderBottom: '1px solid #2D2D2D',
-                color:        '#9CDCFE',
-                cursor:       'pointer',
-                padding:      '7px 10px',
-                textAlign:    'left',
-                fontSize:     '12px',
-                fontFamily:   MONO,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#094771'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
+        <aside style={{ width: '160px', background: '#252526', borderLeft: '1px solid #333', overflowY: 'auto' }}>
+          <div style={{ padding: '10px', fontSize: '11px', color: '#858585', borderBottom: '1px solid #333' }}>📋 SNIPPETS</div>
+          {SNIPPETS.map(s => (
+            <button key={s.label} onClick={() => onChange(s.code)} style={{ width: '100%', padding: '8px', background: 'none', border: 'none', color: '#9CDCFE', cursor: 'pointer', textAlign: 'left', fontSize: '12px', borderBottom: '1px solid #2d2d2d' }}>
               {s.label}
             </button>
           ))}
         </aside>
       )}
 
-      {/* ── Mobil klavye araç çubuğu ── */}
       {isMobile && (
-        <div
-          style={{
-            position:  'absolute',
-            bottom:    0,
-            left:      0,
-            right:     0,
-            display:   'flex',
-            overflowX: 'auto',
-            background:'#2D2D2D',
-            borderTop: '1px solid #474747',
-            padding:   '4px 6px',
-            gap:       '4px',
-            zIndex:    5,
-          }}
-        >
-          {['{', '}', '(', ')', '[', ']', ';', '=>', '//', '"', 'Tab'].map((sym) => (
-            <button
-              key={sym}
-              onClick={() => insertAtCursor(sym === 'Tab' ? '    ' : sym)}
-              style={{
-                background:   '#3C3C3C',
-                border:       '1px solid #555',
-                color:        '#D4D4D4',
-                borderRadius: '4px',
-                padding:      '5px 9px',
-                fontSize:     '14px',
-                cursor:       'pointer',
-                whiteSpace:   'nowrap',
-                minWidth:     '34px',
-                fontFamily:   MONO,
-              }}
-            >
-              {sym}
-            </button>
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', background: '#1e1e1e', padding: '5px', gap: '5px', overflowX: 'auto', zIndex: 100 }}>
+          {['{', '}', '(', ')', ';', '=>', '"'].map(sym => (
+            <button key={sym} onClick={() => insertAtCursor(sym)} style={{ background: '#333', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '4px' }}>{sym}</button>
           ))}
         </div>
       )}

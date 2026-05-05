@@ -1,12 +1,11 @@
 // src/modules/Terminal/Terminal.jsx
 import React, { useRef, useEffect } from 'react';
 
-export function Terminal({ services }) {
+export function Terminal({ logs = [], onClear, onCommand }) {
   const terminalRef = useRef(null);
-  const logs = services?.logs || services?.getLogs?.() || [];
 
+  // Yeni log geldiğinde en alta kaydır
   useEffect(() => {
-    // Otomatik scroll aşağı
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
@@ -15,15 +14,15 @@ export function Terminal({ services }) {
   const handleCommand = (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
       const cmd = e.target.value.trim();
-      services?.terminal?.addLog?.(`> ${cmd}`, 'input');
       
-      // Basit komut işleme
-      if (cmd.toLowerCase() === 'clear') {
-        services?.terminal?.clearLogs?.();
-      } else if (cmd.toLowerCase() === 'help') {
-        services?.terminal?.addLog('Mevcut komutlar: clear, help, run', 'system');
+      // Eğer dışarıdan bir komut işleyici (onCommand) varsa onu çağır
+      if (onCommand) {
+        onCommand(cmd);
       } else {
-        services?.terminal?.addLog(`Komut tanınmadı: ${cmd}`, 'error');
+        // Yoksa basit iç mantığı kullan
+        if (cmd.toLowerCase() === 'clear') {
+          onClear?.();
+        }
       }
       
       e.target.value = '';
@@ -35,19 +34,36 @@ export function Terminal({ services }) {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      background: '#1e1e1e',
+      background: '#0d0d0d', // Daha koyu, gerçek terminal havası
       color: '#d4d4d4',
-      fontFamily: 'monospace',
+      fontFamily: "'JetBrains Mono', monospace",
       overflow: 'hidden'
     }}>
       {/* Terminal Header */}
       <div style={{
-        padding: '8px 12px',
-        background: '#252526',
-        borderBottom: '1px solid #3c3c3c',
-        fontSize: '0.9rem'
+        padding: '6px 12px',
+        background: '#1e1e1e',
+        borderBottom: '1px solid #333',
+        fontSize: '11px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        color: '#888'
       }}>
-        ⚡ SarpShell Terminal
+        <span>⚡ SARPSHELL OUTPUT</span>
+        <button 
+          onClick={onClear}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#007acc',
+            fontSize: '10px',
+            cursor: 'pointer',
+            textTransform: 'uppercase'
+          }}
+        >
+          Temizle
+        </button>
       </div>
 
       {/* Log Alanı */}
@@ -55,27 +71,30 @@ export function Terminal({ services }) {
         ref={terminalRef}
         style={{
           flex: 1,
-          padding: '12px',
+          padding: '15px',
           overflowY: 'auto',
-          background: '#0d0d0d',
           whiteSpace: 'pre-wrap',
-          fontSize: '14px',
-          lineHeight: '1.5'
+          fontSize: '13px',
+          lineHeight: '1.6',
+          scrollBehavior: 'smooth'
         }}
       >
         {logs.length === 0 ? (
-          <div style={{ color: '#666' }}>
-            Terminal başlatıldı.<br />
-            Komut yazıp Enter'a basın (help yazmayı deneyin)...
+          <div style={{ color: '#444', fontStyle: 'italic' }}>
+            Bekliyor... (Kodu çalıştırdığında çıktılar burada görünecek)
           </div>
         ) : (
           logs.map((log, index) => (
             <div
               key={index}
               style={{
+                marginBottom: '4px',
                 color: log.type === 'error' ? '#ff5555' :
-                       log.type === 'input' ? '#00ddff' :
-                       log.type === 'system' ? '#ffcc00' : '#d4d4d4'
+                       log.type === 'success' ? '#50fa7b' :
+                       log.type === 'system' ? '#8be9fd' :
+                       log.type === 'input' ? '#bd93f9' : '#f8f8f2',
+                borderLeft: log.type === 'error' ? '2px solid #ff5555' : 'none',
+                paddingLeft: log.type === 'error' ? '8px' : '0'
               }}
             >
               {log.text}
@@ -85,19 +104,27 @@ export function Terminal({ services }) {
       </div>
 
       {/* Komut Giriş Alanı */}
-      <div style={{ padding: '8px 12px', background: '#252526', borderTop: '1px solid #3c3c3c' }}>
+      <div style={{ 
+        padding: '10px 12px', 
+        background: '#1a1a1a', 
+        borderTop: '1px solid #333',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <span style={{ color: '#50fa7b' }}>$</span>
         <input
           type="text"
-          placeholder="Komut girin... (help)"
+          placeholder="Komut yaz..."
           onKeyDown={handleCommand}
           style={{
-            width: '100%',
+            flex: 1,
             background: 'transparent',
             border: 'none',
             outline: 'none',
-            color: '#d4d4d4',
-            fontFamily: 'monospace',
-            fontSize: '14px'
+            color: '#f8f8f2',
+            fontFamily: 'inherit',
+            fontSize: '13px'
           }}
         />
       </div>
