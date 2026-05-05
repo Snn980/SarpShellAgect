@@ -1,126 +1,107 @@
-/**
- * @file Settings.jsx
- * Uygulama ayarları paneli — font, tema, davranış.
- */
+// src/modules/Settings/Settings.jsx
+import React from 'react';
 
-import { THEMES } from '../Editor/SyntaxHighlighter';
-
-/** @typedef {import('../../types/index.js').AppSettings} AppSettings */
-
-/**
- * @typedef {Object} SettingsProps
- * @property {AppSettings}                    settings
- * @property {(s:AppSettings)=>void}          onChange
- */
-
-/** @param {SettingsProps} props */
-export function Settings({ settings, onChange }) {
-  const MONO = "'JetBrains Mono','Fira Code',monospace";
-
-  /** @param {Partial<AppSettings>} patch */
-  const patch = (partial) => onChange({ ...settings, ...partial });
-
-  const Row = ({ children }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-      {children}
-    </div>
-  );
-
-  const Label = ({ text }) => (
-    <span style={{ fontSize: '13px', color: '#D4D4D4' }}>{text}</span>
-  );
-
-  /** @param {boolean} on @param {()=>void} toggle */
-  const Toggle = ({ on, toggle }) => (
-    <div
-      role="switch"
-      aria-checked={on}
-      onClick={toggle}
-      style={{
-        width: '40px', height: '22px',
-        background:   on ? '#007ACC' : '#555',
-        borderRadius: '11px',
-        cursor:       'pointer',
-        position:     'relative',
-        transition:   'background .2s',
-        flexShrink:   0,
-      }}
-    >
-      <div style={{
-        width:      '18px',
-        height:     '18px',
-        background: 'white',
-        borderRadius: '50%',
-        position:   'absolute',
-        top:        '2px',
-        left:       on ? '20px' : '2px',
-        transition: 'left .2s',
-      }} />
-    </div>
-  );
+export function Settings({ settings, onChange, onClose }) {
+  const handleChange = (key, value) => {
+    onChange(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
-    <div style={{ padding: '20px', overflow: 'auto', height: '100%', maxWidth: '480px', fontFamily: MONO }}>
+    <div className="modal" onClick={onClose}>
+      <div 
+        className="modal-content"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#252526',
+          padding: '24px',
+          borderRadius: '8px',
+          width: '90%',
+          maxWidth: '420px',
+          color: '#d4d4d4',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.6)'
+        }}
+      >
+        <h2 style={{ marginBottom: '20px', borderBottom: '1px solid #3c3c3c', paddingBottom: '10px' }}>
+          ⚙️ Ayarlar
+        </h2>
 
-      {/* Font boyutu */}
-      <Row>
-        <Label text={`Yazı Boyutu: ${settings.fontSize}px`} />
-        <input
-          type="range" min={10} max={22} value={settings.fontSize}
-          onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-          style={{ width: '140px', accentColor: '#007ACC' }}
-        />
-      </Row>
-
-      {/* Tab boyutu */}
-      <Row>
-        <Label text={`Tab Boyutu: ${settings.tabSize}`} />
-        <input
-          type="range" min={2} max={8} value={settings.tabSize}
-          onChange={(e) => patch({ tabSize: Number(e.target.value) })}
-          style={{ width: '140px', accentColor: '#007ACC' }}
-        />
-      </Row>
-
-      {/* Toggle'lar */}
-      {/** @type {Array<{label:string, key:keyof AppSettings}>} */([
-        { label: 'Satır Numaraları', key: 'lineNumbers' },
-        { label: 'Sözcük Sarma',     key: 'wordWrap'    },
-        { label: 'Otomatik Kaydet',  key: 'autoSave'    },
-      ]).map(({ label, key }) => (
-        <Row key={key}>
-          <Label text={label} />
-          <Toggle
-            on={/** @type {boolean} */ (settings[key])}
-            toggle={() => patch({ [key]: !settings[key] })}
-          />
-        </Row>
-      ))}
-
-      {/* Tema */}
-      <div style={{ marginTop: '6px' }}>
-        <p style={{ fontSize: '12px', color: '#858585', marginBottom: '10px' }}>Tema</p>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {Object.keys(THEMES).map((t) => (
-            <button
-              key={t}
-              onClick={() => patch({ theme: /** @type {AppSettings['theme']} */ (t) })}
-              style={{
-                background:   '#1E1E1E',
-                border:       `2px solid ${settings.theme === t ? '#007ACC' : '#474747'}`,
-                borderRadius: '6px',
-                padding:      '7px 14px',
-                color:        '#D4D4D4',
-                cursor:       'pointer',
-                fontSize:     '12px',
-                fontFamily:   MONO,
-              }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label>Theme</label>
+            <select 
+              value={settings.theme}
+              onChange={(e) => handleChange('theme', e.target.value)}
+              style={inputStyle}
             >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Font Size (px)</label>
+            <input 
+              type="number" 
+              value={settings.fontSize}
+              onChange={(e) => handleChange('fontSize', parseInt(e.target.value))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label>Tab Size</label>
+            <input 
+              type="number" 
+              value={settings.tabSize}
+              onChange={(e) => handleChange('tabSize', parseInt(e.target.value))}
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+            <label>
+              <input 
+                type="checkbox" 
+                checked={settings.lineNumbers}
+                onChange={(e) => handleChange('lineNumbers', e.target.checked)}
+              /> Line Numbers
+            </label>
+            <label>
+              <input 
+                type="checkbox" 
+                checked={settings.wordWrap}
+                onChange={(e) => handleChange('wordWrap', e.target.checked)}
+              /> Word Wrap
+            </label>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '30px', textAlign: 'right' }}>
+          <button 
+            onClick={onClose}
+            style={{
+              padding: '10px 20px',
+              background: '#007acc',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Kapat
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
+const inputStyle = {
+  width: '100%',
+  padding: '8px 12px',
+  background: '#1e1e1e',
+  border: '1px solid #3c3c3c',
+  color: '#fff',
+  borderRadius: '4px',
+  marginTop: '5px'
+};

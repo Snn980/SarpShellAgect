@@ -1,170 +1,182 @@
+// src/App.jsx
 import React, { useState, useCallback } from 'react';
 
+import {
+  CodeEditor,
+  Terminal,
+  AgentPanel,
+  GitPanel,
+  ImportManager,
+  NuGetManager,
+  Settings
+} from './modules';
+
+import { useAppServices } from './hooks';
+import { useFileState } from './hooks';
+
 export default function App() {
-  const [code, setCode] = useState(`using System;
+  const services = useAppServices();
 
-class Program
-{
-    static void Main()
-    {
-        Console.WriteLine("Merhaba Dünya! 👋");
-        Console.WriteLine("SarpShellAgect çalışıyor.");
+  const {
+    files,
+    activeFile,
+    updateFileContent,
+  } = useFileState(services);
 
-        // Hata testi için bu satırı aç:
-        // TestHata();
+  // ====================== STATE ======================
+  const [activeTab, setActiveTab] = useState('editor');
+  const [showSettings, setShowSettings] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const [settings, setSettings] = useState({
+    theme: 'dark',
+    fontSize: 15,
+    tabSize: 4,
+    lineNumbers: true,
+    wordWrap: true,
+    autoSave: true,
+  });
+
+  // ====================== ÖRNEK C# DOSYALARI ======================
+  const exampleFiles = {
+    'Program.cs': `using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine("Merhaba Dünya! SarpShellAgect Çalışıyor 🚀");
+        Console.WriteLine("Tarih: " + DateTime.Now);
     }
+}`,
 
-    static void TestHata()
-    {
-        int x = 0;
-        Console.WriteLine(10 / x);   // Division by zero hatası
+    'HttpExample.cs': `using System;
+using System.Net.Http;
+using System.Threading.Tasks;
+
+class Program {
+    static async Task Main() {
+        using var client = new HttpClient();
+        var response = await client.GetAsync("https://httpbin.org/get");
+        Console.WriteLine("Status: " + response.StatusCode);
+        string content = await response.Content.ReadAsStringAsync();
+        Console.WriteLine(content);
     }
-}`);
-
-  const [logs, setLogs] = useState([
-    { type: 'system', text: '🚀 SarpShellAgect v0.2 - Temiz Test Modu' },
-    { type: 'system', text: 'Piston ve Gemini hazır olduğunda gerçek çalıştırılacak.' }
-  ]);
-
-  const [loading, setLoading] = useState(false);
-
-  const addLog = (text, type = 'output') => {
-    setLogs(prev => [...prev, { text, type }]);
+}`
   };
 
-  // ====================== ÇALIŞTIR ======================
+  const currentFile = activeFile || { 
+    id: 'main', 
+    name: 'Program.cs', 
+    content: exampleFiles['Program.cs'] 
+  };
+
+  const currentCode = currentFile.content;
+
+  // ====================== HELPER ======================
+  const addLog = useCallback((text, type = 'output') => {
+    services.terminal?.addLog?.(text, type);
+  }, [services]);
+
   const runCode = async () => {
-    setLoading(true);
-    addLog('> Derleniyor...', 'cmd');
+    if (!currentCode?.trim()) {
+      alert("Lütfen kod yazın!");
+      return;
+    }
 
-    // Gerçek Piston servisi varsa kullan, yoksa simüle et
-    setTimeout(() => {
-      if (code.includes("TestHata")) {
-        addLog('❌ Hata: Division by zero', 'error');
-      } else {
-        addLog('Merhaba Dünya! 👋', 'output');
-        addLog('Program başarıyla tamamlandı.', 'system');
+    setIsRunning(true);
+    addLog("🚀 Kod çalıştırılıyor...", "system");
+
+    try {
+      const result = await services.build?.run?.(currentCode, addLog);
+      if (result?.success) {
+        addLog("✅ Başarıyla tamamlandı!", "success");
       }
-      setLoading(false);
-    }, 700);
+    } catch (err) {
+      addLog(`❌ Hata: ${err.message}`, "error");
+    } finally {
+      setIsRunning(false);
+    }
   };
 
-  // ====================== GEMINI AI ======================
-  const askAI = async () => {
-    const question = prompt("Gemini'ye ne sormak istiyorsun?");
-    if (!question) return;
+  // ====================== RENDER ======================
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'editor':
+        return (
+          <CodeEditor
+            code={currentCode}
+            onChange={(newCode) => updateFileContent(currentFile.id, newCode)}
+            settings={settings}
+            isMobile={true}
+            onRun={runCode}
+            isRunning={isRunning}
+            exampleFiles={exampleFiles}
+            currentFileName={currentFile.name}
+          />
+        );
 
-    addLog(`👤 ${question}`, 'user');
-    setLoading(true);
+      case 'terminal':
+        return <Terminal services={services} />;
 
-    setTimeout(() => {
-      addLog("🤖 Bu kod genel olarak iyi görünüyor. Main metodu düzgün tanımlanmış.", 'ai');
-      setLoading(false);
-    }, 900);
+      case 'agent':
+        return <AgentPanel services={services} currentCode={currentCode} />;
+
+      case 'git':
+        return <GitPanel services={services} currentFile={currentFile} />;
+
+      case 'nuget':
+        return <NuGetManager services={services.nuget} />;
+
+      case 'imports':
+        return <ImportManager code={currentCode} onChange={(c) => updateFileContent(currentFile.id, c)} />;
+
+      default:
+        return <div style={{ padding: 30 }}>Henüz geliştirilmedi.</div>;
+    }
   };
 
   return (
-    <div style={{
-      height: '100dvh',
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#1e1e1e',
-      color: '#ffffff',
-      overflow: 'hidden'
-    }}>
+    <div className="app-container">
+      <header className="tab-bar">
+        <div className="logo">⚡ SarpShellAgect</div>
+        
+        <div className="tabs" style={{ overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          {[
+            { id: 'editor', label: '📝 Editör' },
+            { id: 'terminal', label: '💻 Terminal' },
+            { id: 'agent', label: '🤖 Agent' },
+            { id: 'git', label: '🔀 Git' },
+            { id: 'nuget', label: '📦 NuGet' },
+            { id: 'imports', label: '🔗 Import' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              className={activeTab === tab.id ? 'active' : ''}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-      {/* HEADER */}
-      <div style={{
-        padding: '12px 16px',
-        background: '#252526',
-        borderBottom: '2px solid #007acc',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        flexShrink: 0
-      }}>
-        <h1 style={{ margin: 0, fontSize: '18px' }}>⚡ SarpShell</h1>
+        <button onClick={() => setShowSettings(true)} className="settings-btn">⚙️</button>
+      </header>
 
-        <button 
-          onClick={runCode}
-          disabled={loading}
-          style={{
-            padding: '9px 24px',
-            background: loading ? '#555' : '#007acc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            fontWeight: 'bold',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '15px'
-          }}
-        >
-          {loading ? '⏳ Çalışıyor...' : '▶ Çalıştır'}
-        </button>
+      <main className="main-content">
+        {renderContent()}
+      </main>
 
-        <button 
-          onClick={askAI}
-          style={{
-            padding: '9px 18px',
-            background: 'transparent',
-            border: '1px solid #4EC9B0',
-            color: '#4EC9B0',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          🤖 AI Sor
-        </button>
-      </div>
-
-      {/* CODE EDITOR */}
-      <div style={{ flex: 1, padding: '15px', background: '#1e1e1e', overflow: 'hidden' }}>
-        <textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-          style={{
-            width: '100%',
-            height: '100%',
-            background: '#1e1e1e',
-            color: '#d4d4d4',
-            border: '1px solid #3c3c3c',
-            borderRadius: '6px',
-            padding: '15px',
-            fontFamily: 'Consolas, "Courier New", monospace',
-            fontSize: '15px',
-            lineHeight: '1.5',
-            resize: 'none',
-            outline: 'none',
-            overflow: 'auto'
-          }}
+      {showSettings && (
+        <Settings
+          settings={settings}
+          onChange={setSettings}
+          onClose={() => setShowSettings(false)}
         />
-      </div>
+      )}
 
-      {/* TERMINAL */}
-      <div style={{
-        height: '38%',
-        background: '#0d0d0d',
-        borderTop: '3px solid #007acc',
-        overflow: 'auto',
-        padding: '12px',
-        fontFamily: 'Consolas, monospace',
-        fontSize: '14px'
-      }}>
-        {logs.map((log, index) => (
-          <div
-            key={index}
-            style={{
-              marginBottom: '6px',
-              color: log.type === 'error' ? '#f44747' :
-                     log.type === 'ai' ? '#4ec9b0' :
-                     log.type === 'cmd' ? '#dcdcaa' : '#d4d4d4'
-            }}
-          >
-            {log.text}
-          </div>
-        ))}
-      </div>
+      <footer className="status-bar">
+        <span>{currentFile.name} • C#</span>
+        <span>Ready</span>
+      </footer>
     </div>
   );
 }

@@ -1,129 +1,105 @@
-/**
- * @file Terminal.jsx
- * Çıktı gösterici + AI sohbet girişi.
- */
+// src/modules/Terminal/Terminal.jsx
+import React, { useRef, useEffect } from 'react';
 
-import { useRef, useEffect, useState } from 'react';
-
-/** @typedef {import('../../types/index.js').OutputLine} OutputLine */
-
-/** @type {Record<OutputLine['type'], string>} */
-const COLOR_MAP = {
-  output:  '#D4D4D4',
-  error:   '#F44747',
-  system:  '#858585',
-  cmd:     '#DCDCAA',
-  info:    '#9CDCFE',
-  user:    '#4EC9B0',
-  ai:      '#C586C0',
-  warning: '#FFCC00',
-};
-
-/**
- * @typedef {Object} TerminalProps
- * @property {OutputLine[]} lines
- * @property {boolean}      loading
- * @property {(msg:string)=>Promise<void>} onSend
- * @property {()=>void}    onClear
- */
-
-/** @param {TerminalProps} props */
-export function Terminal({ lines, loading, onSend, onClear }) {
-  const [input, setInput]   = useState('');
-  const bottomRef           = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const MONO = "'JetBrains Mono','Fira Code',monospace";
+export function Terminal({ services }) {
+  const terminalRef = useRef(null);
+  const logs = services?.logs || services?.getLogs?.() || [];
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines]);
+    // Otomatik scroll aşağı
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs]);
 
-  const handleSend = () => {
-    const msg = input.trim();
-    if (!msg || loading) return;
-    setInput('');
-    onSend(msg);
+  const handleCommand = (e) => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      const cmd = e.target.value.trim();
+      services?.terminal?.addLog?.(`> ${cmd}`, 'input');
+      
+      // Basit komut işleme
+      if (cmd.toLowerCase() === 'clear') {
+        services?.terminal?.clearLogs?.();
+      } else if (cmd.toLowerCase() === 'help') {
+        services?.terminal?.addLog('Mevcut komutlar: clear, help, run', 'system');
+      } else {
+        services?.terminal?.addLog(`Komut tanınmadı: ${cmd}`, 'error');
+      }
+      
+      e.target.value = '';
+    }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Çıktı alanı */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '10px 14px' }}>
-        {lines.map((l, i) => (
-          <div
-            key={i}
-            style={{
-              color:      COLOR_MAP[l.type] ?? '#D4D4D4',
-              fontFamily: MONO,
-              fontSize:   '13px',
-              lineHeight: '1.7',
-              whiteSpace: 'pre-wrap',
-              wordBreak:  'break-word',
-            }}
-          >
-            {l.text}
-          </div>
-        ))}
-        {loading && (
-          <div style={{ color: '#C586C0', fontFamily: MONO, fontSize: '13px' }}>
-            ● İşleniyor…
-          </div>
-        )}
-        <div ref={bottomRef} />
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#1e1e1e',
+      color: '#d4d4d4',
+      fontFamily: 'monospace',
+      overflow: 'hidden'
+    }}>
+      {/* Terminal Header */}
+      <div style={{
+        padding: '8px 12px',
+        background: '#252526',
+        borderBottom: '1px solid #3c3c3c',
+        fontSize: '0.9rem'
+      }}>
+        ⚡ SarpShell Terminal
       </div>
 
-      {/* Giriş satırı */}
+      {/* Log Alanı */}
       <div
+        ref={terminalRef}
         style={{
-          borderTop:  '1px solid #474747',
-          background: '#252526',
-          padding:    '7px 10px',
-          display:    'flex',
-          gap:        '8px',
-          alignItems: 'center',
-          flexShrink: 0,
+          flex: 1,
+          padding: '12px',
+          overflowY: 'auto',
+          background: '#0d0d0d',
+          whiteSpace: 'pre-wrap',
+          fontSize: '14px',
+          lineHeight: '1.5'
         }}
       >
-        <span style={{ color: '#4EC9B0', fontSize: '14px', flexShrink: 0 }}>›</span>
+        {logs.length === 0 ? (
+          <div style={{ color: '#666' }}>
+            Terminal başlatıldı.<br />
+            Komut yazıp Enter'a basın (help yazmayı deneyin)...
+          </div>
+        ) : (
+          logs.map((log, index) => (
+            <div
+              key={index}
+              style={{
+                color: log.type === 'error' ? '#ff5555' :
+                       log.type === 'input' ? '#00ddff' :
+                       log.type === 'system' ? '#ffcc00' : '#d4d4d4'
+              }}
+            >
+              {log.text}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Komut Giriş Alanı */}
+      <div style={{ padding: '8px 12px', background: '#252526', borderTop: '1px solid #3c3c3c' }}>
         <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
-          placeholder="Kod hakkında soru sor…"
-          disabled={loading}
+          type="text"
+          placeholder="Komut girin... (help)"
+          onKeyDown={handleCommand}
           style={{
-            flex:       1,
+            width: '100%',
             background: 'transparent',
-            border:     'none',
-            outline:    'none',
-            color:      '#D4D4D4',
-            fontSize:   '13px',
-            fontFamily: MONO,
+            border: 'none',
+            outline: 'none',
+            color: '#d4d4d4',
+            fontFamily: 'monospace',
+            fontSize: '14px'
           }}
         />
-        <button
-          onClick={onClear}
-          style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: '16px' }}
-          title="Temizle"
-        >
-          🗑
-        </button>
-        <button
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          style={{
-            background:   'transparent',
-            border:       '1px solid #007ACC',
-            color:        '#007ACC',
-            borderRadius: '4px',
-            padding:      '3px 10px',
-            fontSize:     '12px',
-            cursor:       loading ? 'not-allowed' : 'pointer',
-            fontFamily:   MONO,
-            opacity:      loading ? 0.5 : 1,
-          }}
-        >
-          Gönder ↵
-        </button>
       </div>
     </div>
   );
